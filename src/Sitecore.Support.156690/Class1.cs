@@ -754,242 +754,58 @@ namespace Sitecore.Support.Pipelines.Loader
     }
 }
 
-namespace Sitecore.Support.Data.DataProviders.SqlServer
+namespace Sitecore.Support.Notifications
 {
     using System;
-    using System.Collections.Generic;
-    using Common;
-    using Diagnostics;
-    using Globalization;
-    using Sitecore.Data;
+    using Configuration;
+    using Events;
     using Sitecore.Data.Clones;
-    using Sitecore.Data.DataProviders.Sql;
-    using Sitecore.Data.SqlServer;
+    using Sitecore.Data.DataProviders.SqlServer;
+    using Sitecore.Data.Events;
     using Sitecore.Data.Items;
 
-
-    public class SqlServerNotificationProvider : NotificationProvider
+    public class ProcessNotifications
     {
-        /// <summary>The database connection string.</summary>
-        private SqlDataApi dataApi;
-        /// <summary>The name of database provider refers to.</summary>
-        private string databaseName;
-
-        /// <summary>Gets the data API.</summary>
-        /// <value>The data API.</value>
-        protected SqlDataApi DataApi
+        public void Process(object sender, EventArgs args)
         {
-            get
+            Item item = Event.ExtractParameter(args, 0) as Item;
+
+            if (item.IsClone == true)
             {
-                return this.dataApi;
+                return;
             }
-        }
 
-        /// <summary>Gets the name of the database the provider refers to.</summary>
-        /// <value>The name of the database.</value>
-        protected string DatabaseName
-        {
-            get
+            var clones = item.GetClones();
+
+            if (clones != null)
             {
-                return this.databaseName;
-            }
-        }
-
-        /// <summary>Gets or sets the serializer.</summary>
-        /// <value>The serializer.</value>
-        protected Serializer Serializer { get; set; }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="T:Sitecore.Data.DataProviders.SqlServer.SqlServerNotificationProvider" /> class.
-        /// </summary>
-        /// <param name="connectionStringName">The connection string name.</param>
-        /// <param name="databaseName">Name of the database.</param>
-        public SqlServerNotificationProvider(string connectionStringName, string databaseName)
-          : this((SqlDataApi)new SqlServerDataApi(connectionStringName), databaseName)
-        {
-            Assert.ArgumentNotNull((object)connectionStringName, "connectionStringName");
-            Assert.ArgumentNotNull((object)databaseName, "databaseName");
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="T:Sitecore.Data.DataProviders.SqlServer.SqlServerNotificationProvider" /> class.
-        /// </summary>
-        /// <param name="api">The Data API.</param>
-        /// <param name="databaseName">Name of the database.</param>
-        protected SqlServerNotificationProvider(SqlDataApi api, string databaseName)
-        {
-            Assert.ArgumentNotNullOrEmpty(databaseName, "databaseName");
-            Assert.ArgumentNotNull((object)api, "api");
-            this.dataApi = api;
-            this.Serializer = new Serializer();
-            this.databaseName = databaseName;
-        }
-
-        /// <summary>The add notification.</summary>
-        /// <param name="notification">The notification.</param>
-        /// <exception cref="T:System.NotImplementedException">
-        /// </exception>
-        public override void AddNotification(Notification notification)
-        {
-            Assert.ArgumentNotNull((object)notification, "notification");
-            Assert.IsNotNull((object)notification.Uri, "uri");
-            Assert.IsNotNull((object)notification.Uri.ItemID, "item ID");
-            Assert.IsNotNull((object)notification.Uri.Language, "language");
-            Assert.IsNotNull((object)notification.Uri.Version, "version");
-            string sql = "INSERT INTO {0}Notifications{1} (\r\n                      {0}Id{1}, {0}ItemId{1}, {0}Language{1}, {0}Version{1}, {0}Processed{1}, {0}InstanceType{1}, {0}InstanceData{1}, {0}Created{1}\r\n                    )\r\n                    VALUES (\r\n                      {2}id{3}, {2}itemId{3}, {2}language{3}, {2}version{3}, {2}processed{3}, {2}instanceType{3}, {2}instanceData{3}, {2}created{3}\r\n                    )";
-            string assemblyQualifiedName = notification.GetType().AssemblyQualifiedName;
-            string str = this.Serializer.Serialize<Notification>(notification);
-            object[] objArray = new object[16]
-            {
-        (object) "id",
-        (object) notification.ID,
-        (object) "itemId",
-        (object) notification.Uri.ItemID,
-        (object) "language",
-        (object) notification.Uri.Language.Name,
-        (object) "version",
-        (object) notification.Uri.Version,
-        (object) "processed",
-        (object) notification.Processed,
-        (object) "instanceType",
-        (object) assemblyQualifiedName,
-        (object) "instanceData",
-        (object) str,
-        (object) "created",
-        (object) DateTime.UtcNow
-            };
-            this.DataApi.Execute(sql, objArray);
-        }
-
-        /// <summary>The get notification.</summary>
-        /// <param name="id">The notification id.</param>
-        /// <returns>The Notification object by Id.</returns>
-        public override Notification GetNotification(ID id)
-        {
-            Assert.ArgumentNotNull((object)id, "id");
-            List<Notification> notificationList = new List<Notification>(this.DataApi.CreateObjectReader<Notification>("SELECT \r\n          {0}Id{1}, {0}ItemId{1}, {0}Language{1}, {0}Version{1}, {0}Processed{1}, {0}InstanceType{1}, {0}InstanceData{1}, {0}Created{1} \r\n        FROM {0}Notifications{1} WITH (NOLOCK)\r\n        WHERE {0}Id{1}={2}id{3}", new object[2]
-            {
-        (object) "id",
-        (object) id
-            }, new Func<DataProviderReader, Notification>(this.CreateNotification)));
-            if (notificationList.Count == 0 || notificationList.Count > 1)
-                return (Notification)null;
-            return notificationList[0];
-        }
-
-        /// <summary>The get notifications.</summary>
-        /// <param name="clone">The Stecore item.</param>
-        /// <returns>The notifications for the specified item.</returns>
-        public override IEnumerable<Notification> GetNotifications(Item clone)
-        {
-            Assert.ArgumentNotNull((object)clone, "clone");
-            return this.GetNotifications(clone.Uri);
-        }
-
-        /// <summary>Gets the notifications.</summary>
-        /// <param name="itemUri">The item URI.</param>
-        /// <returns>The notifications.</returns>
-        public override IEnumerable<Notification> GetNotifications(ItemUri itemUri)
-        {
-            Assert.ArgumentNotNull((object)itemUri, "itemUri");
-
-            IEnumerable<Notification> notifications = this.DataApi.CreateObjectReader<Notification>("SELECT \r\n          {0}Id{1}, {0}ItemId{1}, {0}Language{1}, {0}Version{1}, {0}Processed{1}, {0}InstanceType{1}, {0}InstanceData{1}, {0}Created{1}  \r\n        FROM {0}Notifications{1} WITH (NOLOCK)\r\n        WHERE {0}Processed{1}={2}processed{3} AND {0}ItemId{1}={2}itemId{3}\r\n              AND (({0}Language{1}={2}invariantLanguage{3}) OR ({0}Language{1}={2}language{3}) OR ({0}Language{1} IS NULL))\r\n              AND (({0}Version{1}={2}latestVersion{3}) OR ({0}Version{1}={2}version{3}))\r\n        ORDER BY {0}Created{1}", new object[12]
-            {
-        (object) "processed",
-        (object) false,
-        (object) "itemId",
-        (object) itemUri.ItemID,
-        (object) "invariantLanguage",
-        (object) Language.Invariant.ToString(),
-        (object) "language",
-        (object) itemUri.Language.ToString(),
-        (object) "latestVersion",
-        (object) Sitecore.Data.Version.Latest.Number,
-        (object) "version",
-        (object) itemUri.Version.Number
-            }, new Func<DataProviderReader, Notification>(this.CreateNotification));
-
-
-            if (Configuration.Settings.ItemCloning.ForceUpdate)
-            {
-                Item i = Sitecore.Data.Database.GetDatabase(itemUri.DatabaseName).GetItem(itemUri.ItemID);
-
-                foreach (var notification in notifications)
+                foreach (var clone in clones)
                 {
-                    VersionAddedNotification n = notification as VersionAddedNotification;
-
-                    if (n != null)
+                    if (Settings.ItemCloning.ForceUpdate)
                     {
-                        n.ForceAccept = true;
-                    }
+                        var notifications = item.Database.NotificationProvider.GetNotifications(clone);
+                        using (new EventDisabler())
+                        {
+                            if (notifications != null)
+                            {
+                                foreach (var notification in notifications)
+                                {
+                                    VersionAddedNotification n = notification as VersionAddedNotification;
 
-                    notification.Accept(i);
+                                    if (n != null)
+                                    {
+                                        n.ForceAccept = true;
+                                    }
+
+                                    notification.Accept(clone);
+                                }
+                            }
+                        }
+
+                    }
                 }
             }
-            return notifications;
-        }
-
-        /// <summary>Gets the notifications.</summary>
-        /// <param name="notificationType">Type of the notification.</param>
-        /// <returns>The notifications.</returns>
-        public override IEnumerable<Notification> GetNotifications(Type notificationType)
-        {
-            Assert.ArgumentNotNull((object)notificationType, "notificationType");
-            return this.DataApi.CreateObjectReader<Notification>("SELECT \r\n          {0}Id{1}, {0}ItemId{1}, {0}Language{1}, {0}Version{1}, {0}Processed{1}, {0}InstanceType{1}, {0}InstanceData{1}, {0}Created{1}  \r\n        FROM {0}Notifications{1} WITH (NOLOCK)\r\n        WHERE {0}Processed{1}={2}processed{3} AND {0}InstanceType{1}={2}instanceType{3}              \r\n        ORDER BY {0}Created{1}", new object[4]
-            {
-        (object) "processed",
-        (object) false,
-        (object) "instanceType",
-        (object) notificationType.AssemblyQualifiedName
-            }, new Func<DataProviderReader, Notification>(this.CreateNotification));
-        }
-
-        /// <summary>Gets all notifications.</summary>
-        /// <returns>The list of all registered Notifications.</returns>
-        public override IEnumerable<Notification> GetNotifications()
-        {
-            return this.DataApi.CreateObjectReader<Notification>("SELECT \r\n          {0}Id{1}, {0}ItemId{1}, {0}Language{1}, {0}Version{1}, {0}Processed{1}, {0}InstanceType{1}, {0}InstanceData{1}, {0}Created{1} \r\n        FROM {0}Notifications{1} WITH (NOLOCK) ORDER BY {0}Created{1}", new object[0], new Func<DataProviderReader, Notification>(this.CreateNotification));
-        }
-
-        /// <summary>The remove notification.</summary>
-        /// <param name="id">The notification id.</param>
-        /// <returns>
-        /// <c>true</c> if notification with specified id has been removed.
-        /// </returns>
-        public override bool RemoveNotification(ID id)
-        {
-            Assert.ArgumentNotNull((object)id, "id");
-            return this.DataApi.Execute("DELETE FROM {0}Notifications{1} WHERE {0}Id{1}={2}id{3}", (object)"id", (object)id) == 1;
-        }
-
-        /// <summary>Removes obsolete notifications.</summary>
-        public override void Cleanup()
-        {
-            foreach (Notification notification in this.DataApi.CreateObjectReader<Notification>("SELECT \r\n          {0}n{1}.{0}Id{1}, {0}n{1}.{0}ItemId{1}, {0}n{1}.{0}Language{1}, {0}n{1}.{0}Version{1}, {0}n{1}.{0}Processed{1}, {0}n{1}.{0}InstanceType{1}, {0}n{1}.{0}InstanceData{1} \r\n        FROM {0}Notifications{1} as {0}n{1}  WITH (NOLOCK)\r\n          WHERE NOT EXISTS(SELECT * FROM {0}Items{1} as {0}i{1}\r\n                            WHERE {0}i{1}.{0}Id{1}={0}n{1}.{0}ItemId{1} AND\r\n                                  (({0}n{1}.{0}Version{1}=0) OR EXISTS(SELECT * FROM {0}VersionedFields{1} as {0}v{1}\r\n                                                                        WHERE ({0}v{1}.{0}ItemId{1}={0}n{1}.{0}ItemId{1}) AND \r\n                                                                              ({0}v{1}.{0}Language{1}={0}n{1}.{0}Language{1}) AND\r\n                                                                              ({0}v{1}.{0}Version{1}={0}n{1}.{0}Version{1}))))", new object[0], new Func<DataProviderReader, Notification>(this.CreateNotification)))
-                this.RemoveNotification(notification.ID);
-            base.Cleanup();
-        }
-
-        /// <summary>The create the notification from table row.</summary>
-        /// <param name="reader">The data reader.</param>
-        /// <returns>The saved Notification object.</returns>
-        protected Notification CreateNotification(DataProviderReader reader)
-        {
-            Assert.ArgumentNotNull((object)reader, "reader");
-            ID id = new ID(this.DataApi.GetGuid(0, reader));
-            ID itemID = new ID(this.DataApi.GetGuid(1, reader));
-            Language language = Language.Parse(this.DataApi.GetString(2, reader));
-            Sitecore.Data.Version version = Sitecore.Data.Version.Parse(this.DataApi.GetInt(3, reader));
-            bool boolean = this.DataApi.GetBoolean(4, reader);
-            Type type = Type.GetType(this.DataApi.GetString(5, reader));
-            Notification notification = this.Serializer.Deserialize(this.DataApi.GetString(6, reader), type) as Notification;
-            Assert.IsNotNull((object)notification, "notification");
-            notification.ID = id;
-            notification.Uri = new ItemUri(itemID, language, version, this.DatabaseName);
-            notification.Processed = boolean;
-            return notification;
         }
     }
 }
-
 
