@@ -138,75 +138,98 @@
         /// <summary>The add version event.</summary>
         /// <param name="sender">The sender.</param>
         /// <param name="e">The event arguments.</param>
+        
+
+
+
         private static void DataEngine_AddedVersion(object sender, ExecutedEventArgs<AddVersionCommand> e)
         {
-            Assert.ArgumentNotNull((object)e, "e");
+            Assert.ArgumentNotNull(e, "e");
             Item latestVersion = e.Command.Item.Versions.GetLatestVersion();
-            if (latestVersion == null)
-                return;
-            IEnumerable<Item> allClones = NotificationManager.GetAllClones(latestVersion);
-            Set<ID> set = new Set<ID>();
-            if (latestVersion.Version == Sitecore.Data.Version.First)
+            if (latestVersion != null)
             {
-                if (Settings.ItemCloning.ForceUpdate && !allClones.Any<Item>() && latestVersion.Versions.GetVersions(true).Length == 1)
-                    NotificationManager.HandleChildAddedEvent(latestVersion.Parent, latestVersion.ID, true);
-                Item sharedFieldsSource = latestVersion.SharedFieldsSource;
-                if (sharedFieldsSource != null)
-                    sharedFieldsSource = ItemManager.GetItem(sharedFieldsSource.ID, latestVersion.Language, Sitecore.Data.Version.Latest, sharedFieldsSource.Database, SecurityCheck.Disable);
-                if (sharedFieldsSource != null)
+                IEnumerable<Item> allClones = GetAllClones(latestVersion);
+                Set<ID> set = new Set<ID>();
+                if (latestVersion.Version == Sitecore.Data.Version.First)
                 {
-                    latestVersion.Editing.BeginEdit();
-                    latestVersion[FieldIDs.Source] = sharedFieldsSource.Uri.ToString();
-                    latestVersion.Editing.EndEdit();
-                }
-                foreach (Item obj in allClones)
-                {
-                    if (obj.SourceUri == latestVersion.Uri)
-                        set.Add(obj.ID);
-                }
-            }
-            foreach (Item obj in allClones)
-            {
-                if (!set.Contains(obj.ID))
-                {
-                    Assert.IsNotNull((object)obj.Database.NotificationProvider, "NotificationProvider");
-                    if (latestVersion.Version == Sitecore.Data.Version.First)
+                    if ((Settings.ItemCloning.ForceUpdate && !allClones.Any<Item>()) && (latestVersion.Versions.GetVersions(true).Length == 1))
                     {
-                        set.Add(obj.ID);
-                        FirstVersionAddedNotification addedNotification = new FirstVersionAddedNotification();
-                        addedNotification.Uri = new ItemUri(obj.ID, obj.Paths.FullPath, Language.Invariant, Sitecore.Data.Version.Latest, obj.Database.Name);
-                        addedNotification.VersionUri = latestVersion.Uri;
-                        Notification notification = (Notification)addedNotification;
-                        if (Settings.ItemCloning.ForceUpdate)
+                        HandleChildAddedEvent(latestVersion.Parent, latestVersion.ID, true);
+                    }
+                    Item sharedFieldsSource = latestVersion.SharedFieldsSource;
+                    if (sharedFieldsSource != null)
+                    {
+                        sharedFieldsSource = ItemManager.GetItem(sharedFieldsSource.ID, latestVersion.Language, Sitecore.Data.Version.Latest, sharedFieldsSource.Database, SecurityCheck.Disable);
+                    }
+                    if (sharedFieldsSource != null)
+                    {
+                        latestVersion.Editing.BeginEdit();
+                        latestVersion[FieldIDs.Source] = sharedFieldsSource.Uri.ToString();
+                        latestVersion.Editing.EndEdit();
+                    }
+                    foreach (Item item3 in allClones)
+                    {
+                        if (item3.SourceUri == latestVersion.Uri)
                         {
-                            ((VersionAddedNotification)notification).ForceAccept = true;
-                            notification.Accept(obj);
+                            set.Add(item3.ID);
+                        }
+                    }
+                }
+                foreach (Item item4 in allClones)
+                {
+                    if (!set.Contains(item4.ID))
+                    {
+                        Notification notification;
+                        Assert.IsNotNull(item4.Database.NotificationProvider, "NotificationProvider");
+                        if (latestVersion.Version == Sitecore.Data.Version.First)
+                        {
+                            set.Add(item4.ID);
+                            FirstVersionAddedNotification notification2 = new FirstVersionAddedNotification
+                            {
+                                Uri = new ItemUri(item4.ID, item4.Paths.FullPath, Language.Invariant, Sitecore.Data.Version.Latest, item4.Database.Name),
+                                VersionUri = latestVersion.Uri
+                            };
+                            notification = notification2;
+                            if (Settings.ItemCloning.ForceUpdate)
+                            {
+                                ((FirstVersionAddedNotification)notification).ForceAccept = true;
+                                notification.Accept(item4);
+                            }
+                            else
+                            {
+                                item4.Database.NotificationProvider.AddNotification(notification);
+                            }
                         }
                         else
-                            obj.Database.NotificationProvider.AddNotification(notification);
-                    }
-                    else
-                    {
-                        Language language = obj.Language;
-                        if (!(language != latestVersion.Language))
                         {
-                            set.Add(obj.ID);
-                            VersionAddedNotification addedNotification = new VersionAddedNotification();
-                            addedNotification.Uri = new ItemUri(obj.ID, language, Sitecore.Data.Version.Latest, obj.Database);
-                            addedNotification.VersionUri = latestVersion.Uri;
-                            Notification notification = (Notification)addedNotification;
-                            //if (Settings.ItemCloning.ForceUpdate)
-                            //{
-                            //    ((VersionAddedNotification)notification).ForceAccept = true;
-                            //    notification.Accept(obj);
-                            //}
-                            //else
-                            obj.Database.NotificationProvider.AddNotification(notification);
+                            Language language = item4.Language;
+                            if (language == latestVersion.Language)
+                            {
+                                set.Add(item4.ID);
+                                var item4latest = item4.Versions.GetLatestVersion(language);
+                                VersionAddedNotification notification3 = new VersionAddedNotification
+                                {
+                                    Uri = item4latest.Uri,// new ItemUri(item4.ID, language, Sitecore.Data.Version.Latest, item4.Database),
+                                    VersionUri = latestVersion.Uri
+                                };
+                                notification = notification3;
+                                if (Settings.ItemCloning.ForceUpdate)
+                                {
+                                    ((VersionAddedNotification)notification).ForceAccept = true;
+                                    notification.Accept(item4latest);
+                                }
+                                else
+                                {
+                                    item4.Database.NotificationProvider.AddNotification(notification);
+                                }
+                            }
                         }
                     }
                 }
             }
         }
+
+
 
         /// <summary>The create item event.</summary>
         /// <param name="sender">The sender.</param>
@@ -683,129 +706,7 @@
     }
 }
 
-namespace Sitecore.Support.Pipelines.InitializeManagers
-{
-    using Sitecore.Pipelines;
-    using Support.Data.Managers;
 
-    [UsedImplicitly]
-    public class InitializeNotificationManager
-    {
-        /// <summary>Processsor entry point method.</summary>
-        /// <param name="args"></param>
-        [UsedImplicitly]
-        public void Process(PipelineArgs args)
-        {
-            NotificationManager.Initialize();
-        }
-    }
-}
 
-namespace Sitecore.Support.Pipelines.Loader
-{
-    using System;
-    using Diagnostics;
-    using Eventing;
-    using Events;
-    using Publishing;
-    using Sitecore.Data.Managers;
-    using Sitecore.Data.Proxies;
-    using Sitecore.Data.Serialization;
-    using Sitecore.Pipelines;
-    using Sitecore.Search;
 
-    public class InitializeManagers
-    {
-        /// <summary>The pipeline name</summary>
-        public const string PipelineName = "initializeManagers";
-
-        /// <summary>Initializes static manager classes.</summary>
-        /// <param name="args">The arguments.</param>
-        /// <exception cref="T:Sitecore.Exceptions.ConfigurationException"></exception>
-        public void Process(PipelineArgs args)
-        {
-            CorePipeline pipeline = CorePipelineFactory.GetPipeline("initializeManagers", string.Empty);
-            if (pipeline != null)
-            {
-                pipeline.Run(args);
-            }
-            else
-            {
-                Log.SingleError(string.Format("The '{0}' pipeline is not defined in the Sitecore configuration file.", (object)"initializeManagers"), (object)typeof(InitializeManagers));
-                this.InitManagersInternally();
-            }
-        }
-
-        [Obsolete("This method is fallback functionality for CMS 8.1 upgrade procedure. It will be removed in latest version.")]
-        private void InitManagersInternally()
-        {
-            Event.Initialize();
-            ItemManager.Initialize();
-            ProxyManager.Initialize();
-            HistoryManager.Initialize();
-            IndexingManager.Initialize();
-            LanguageManager.Initialize();
-            PublishManager.Initialize();
-            SearchManager.Initialize();
-            Manager.Initialize();
-            Support.Data.Managers.NotificationManager.Initialize();
-            EventManager.Initialize();
-        }
-    }
-}
-
-namespace Sitecore.Support.Notifications
-{
-    using System;
-    using Configuration;
-    using Events;
-    using Sitecore.Data.Clones;
-    using Sitecore.Data.DataProviders.SqlServer;
-    using Sitecore.Data.Events;
-    using Sitecore.Data.Items;
-
-    public class ProcessNotifications
-    {
-        public void Process(object sender, EventArgs args)
-        {
-            Item item = Event.ExtractParameter(args, 0) as Item;
-
-            if (item.IsClone == true)
-            {
-                return;
-            }
-
-            var clones = item.GetClones();
-
-            if (clones != null)
-            {
-                foreach (var clone in clones)
-                {
-                    if (Settings.ItemCloning.ForceUpdate)
-                    {
-                        var notifications = item.Database.NotificationProvider.GetNotifications(clone);
-                        using (new EventDisabler())
-                        {
-                            if (notifications != null)
-                            {
-                                foreach (var notification in notifications)
-                                {
-                                    VersionAddedNotification n = notification as VersionAddedNotification;
-
-                                    if (n != null)
-                                    {
-                                        n.ForceAccept = true;
-                                    }
-
-                                    notification.Accept(clone);
-                                }
-                            }
-                        }
-
-                    }
-                }
-            }
-        }
-    }
-}
 
